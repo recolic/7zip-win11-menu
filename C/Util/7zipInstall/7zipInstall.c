@@ -922,6 +922,67 @@ static void WriteShellEx(void)
   #endif
   MyRegistry_CreateKeyAndVal   (HKEY_LOCAL_MACHINE, k_Shell_Approved, k_7zip_CLSID, k_7zip_ShellExtension);
 
+  /* Register Windows 11 modern context menu sparse package if present */
+  {
+    WCHAR manifestPath[MAX_PATH + 40];
+    WCHAR msixPath[MAX_PATH + 40];
+    WCHAR cerPath[MAX_PATH + 40];
+    WCHAR psCmd[MAX_PATH * 3 + 200];
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    BoolInt hasMsix, hasManifest;
+
+    wcscpy(msixPath, path);
+    CatAscii(msixPath, "7-Zip.ModernContextMenu.msix");
+    hasMsix = (GetFileAttributesW(msixPath) != INVALID_FILE_ATTRIBUTES);
+
+    wcscpy(cerPath, path);
+    CatAscii(cerPath, "7-Zip.cer");
+
+    wcscpy(manifestPath, path);
+    CatAscii(manifestPath, "AppxManifest.xml");
+    hasManifest = (GetFileAttributesW(manifestPath) != INVALID_FILE_ATTRIBUTES);
+
+    if (hasMsix || hasManifest)
+    {
+      psCmd[0] = 0;
+      CatAscii(psCmd, "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"");
+      if (hasMsix)
+      {
+        if (GetFileAttributesW(cerPath) != INVALID_FILE_ATTRIBUTES)
+        {
+          CatAscii(psCmd, "Import-Certificate -FilePath '");
+          wcscat(psCmd, cerPath);
+          CatAscii(psCmd, "' -CertStoreLocation Cert:\\LocalMachine\\TrustedPeople -ErrorAction SilentlyContinue; ");
+        }
+        CatAscii(psCmd, "Add-AppxPackage -Path '");
+        wcscat(psCmd, msixPath);
+      }
+      else
+      {
+        CatAscii(psCmd, "Add-AppxPackage -Register '");
+        wcscat(psCmd, manifestPath);
+      }
+      CatAscii(psCmd, "' -ExternalLocation '");
+      wcscat(psCmd, path);
+      CatAscii(psCmd, "' -ErrorAction SilentlyContinue; ");
+      CatAscii(psCmd, "[shell32]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)\"");
+
+      memset(&si, 0, sizeof(si));
+      memset(&pi, 0, sizeof(pi));
+      si.cb = sizeof(si);
+      si.dwFlags = STARTF_USESHOWWINDOW;
+      si.wShowWindow = SW_HIDE;
+
+      if (CreateProcessW(NULL, psCmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
+      {
+        WaitForSingleObject(pi.hProcess, 15000);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+      }
+    }
+  }
+
 
   wcscpy(destPath, path);
   CatAscii(destPath, "7zFM.exe");
@@ -1607,6 +1668,7 @@ if (res == SZ_OK)
 
     if (i == db.NumFiles)
     {
+      if (!g_SilentMode) { SetWindowTextW(g_InfoLine_HWND, L"Running additional tasks"); UpdateWindow(g_InfoLine_HWND); }
       SetRegKey_Path();
       WriteCLSID();
       WriteShellEx();

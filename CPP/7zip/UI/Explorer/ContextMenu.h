@@ -154,6 +154,7 @@ private:
 
   bool IsSeparator;
   bool IsRoot;
+  bool _itemsLoaded;
   CObjectVector< CMyComPtr<IExplorerCommand> > SubCommands;
   unsigned CurrentSubCommand;
 

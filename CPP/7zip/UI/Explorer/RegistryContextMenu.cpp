@@ -148,6 +148,89 @@ bool CheckContextMenuHandler(const UString &path, UInt32 wow)
 }
 
 
+static bool IsWindows11OrGreater()
+{
+  HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  if (!ntdll)
+    return false;
+  typedef LONG (WINAPI *Func_RtlGetVersion)(OSVERSIONINFOEXW *);
+  Func_RtlGetVersion func = (Func_RtlGetVersion)(void *)GetProcAddress(ntdll, "RtlGetVersion");
+  if (!func)
+    return false;
+  OSVERSIONINFOEXW vi;
+  memset(&vi, 0, sizeof(vi));
+  vi.dwOSVersionInfoSize = sizeof(vi);
+  if (func(&vi) != 0)
+    return false;
+  return (vi.dwMajorVersion > 10 || (vi.dwMajorVersion == 10 && vi.dwBuildNumber >= 22000));
+}
+
+static void RegisterWin11ContextMenuPackage(bool setMode, const UString &dllPath)
+{
+  if (!IsWindows11OrGreater())
+    return;
+
+  UString dir;
+  const int slashPos = dllPath.ReverseFind_PathSepar();
+  if (slashPos >= 0)
+    dir = dllPath.Left((unsigned)(slashPos + 1));
+  else
+    return;
+
+  UString msixPath = dir;
+  msixPath += L"7-Zip.ModernContextMenu.msix";
+  const bool msixExists = (::GetFileAttributesW(us2fs(msixPath)) != INVALID_FILE_ATTRIBUTES);
+
+  UString manifestPath = dir;
+  manifestPath += L"AppxManifest.xml";
+  const bool manifestExists = (::GetFileAttributesW(us2fs(manifestPath)) != INVALID_FILE_ATTRIBUTES);
+
+  UString cmd = L"powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"";
+  if (setMode)
+  {
+    if (msixExists)
+    {
+      cmd += L"Add-AppxPackage -Path '";
+      cmd += msixPath;
+      cmd += L"' -ExternalLocation '";
+      cmd += dir;
+      cmd += L"' -ErrorAction SilentlyContinue";
+    }
+    else if (manifestExists)
+    {
+      cmd += L"Add-AppxPackage -Register '";
+      cmd += manifestPath;
+      cmd += L"' -ExternalLocation '";
+      cmd += dir;
+      cmd += L"' -ErrorAction SilentlyContinue";
+    }
+    else
+      return;
+  }
+  else
+  {
+    cmd += L"Get-AppxPackage -Name 7-Zip.ModernContextMenu -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue";
+  }
+  cmd += L"\"";
+
+  STARTUPINFOW si;
+  memset(&si, 0, sizeof(si));
+  si.cb = sizeof(si);
+  si.dwFlags = STARTF_USESHOWWINDOW;
+  si.wShowWindow = SW_HIDE;
+
+  PROCESS_INFORMATION pi;
+  memset(&pi, 0, sizeof(pi));
+
+  UString cmdMutable = cmd;
+  if (::CreateProcessW(NULL, cmdMutable.Ptr_non_const(), NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
+  {
+    ::WaitForSingleObject(pi.hProcess, 10000);
+    ::CloseHandle(pi.hProcess);
+    ::CloseHandle(pi.hThread);
+  }
+}
+
 static LONG MyCreateKey(CKey &key, HKEY parentKey, LPCTSTR keyName, UInt32 wow)
 {
   return key.Create(parentKey, keyName, REG_NONE,
@@ -218,6 +301,8 @@ LONG SetContextMenuHandler(bool setMode, const UString &path, UInt32 wow)
         MyRegistry_DeleteKey_HKCR(s, wow);
     }
   }
+
+  RegisterWin11ContextMenuPackage(setMode, path);
 
   return res;
 }

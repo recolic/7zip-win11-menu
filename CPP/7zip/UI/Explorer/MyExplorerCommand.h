@@ -18,7 +18,11 @@
     ShObjIdl_core.h : new Windows 10 SDK */
 
 #ifndef Z7_OLD_WIN_SDK
+#if defined(__MINGW32__) || defined(__MINGW64__)
+#include <shobjidl.h>
+#else
 #include <ShObjIdl.h>
+#endif
 #endif
 
 #ifndef __IShellItem_INTERFACE_DEFINED__

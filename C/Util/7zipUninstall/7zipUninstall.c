@@ -555,6 +555,29 @@ static void WriteCLSID(void)
     if (AreEqual_Path_PrefixName(s, path, kUninstallExe))
       MyRegistry_DeleteKey(HKEY_LOCAL_MACHINE, k_Uninstall_7zip);
   }
+
+  /* Unregister Windows 11 modern context menu package if registered */
+  {
+    WCHAR psCmd[300];
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+
+    psCmd[0] = 0;
+    CatAscii(psCmd, "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"Get-AppxPackage -Name 7-Zip.ModernContextMenu -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue\"");
+
+    memset(&si, 0, sizeof(si));
+    memset(&pi, 0, sizeof(pi));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+
+    if (CreateProcessW(NULL, psCmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
+    {
+      WaitForSingleObject(pi.hProcess, 15000);
+      CloseHandle(pi.hProcess);
+      CloseHandle(pi.hThread);
+    }
+  }
 }
 
 
