@@ -5,4 +5,6 @@
 
 made by Gemini. dirty but works. [win11 x64 pre-built installer](https://github.com/recolic/7zip-win11-menu/releases)
 
-note: win11 right-click menu might require logout-login to show up.
+> note: win11 right-click menu might require logout-login to show up.
+
+To build by yourself, run `Build-Installer.ps1` in VisualStudio x64 dev terminal.
